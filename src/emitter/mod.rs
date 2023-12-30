@@ -2,10 +2,14 @@ use std::fmt::Write;
 
 use snafu::{ResultExt, Snafu};
 
-use crate::events::Event;
+use crate::{
+    emitter::state::{State, States},
+    events::Event,
+};
 
 mod iter;
 mod options;
+mod state;
 
 pub use iter::*;
 pub use options::*;
@@ -16,24 +20,13 @@ pub enum Error {
     Write { source: std::fmt::Error },
 }
 
-// TODO (Techassi): Also handle flow style
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub enum State {
-    #[default]
-    Initial,
-    SequenceItem,
-    MappingKey,
-    MappingValue,
-}
-
 #[derive(Debug)]
 pub struct Emitter {
     indent_level: usize,
 
     // TODO (Techassi): The state(s) need to be managed as a stack to keep track
     // of mapping / sequence recursion depths
-    last_state: State,
-    state: State,
+    states: States,
 
     options: EmitterOptions,
     events: EventIter,
@@ -46,8 +39,7 @@ impl Emitter {
         let events = EventIter::new(events);
 
         Self {
-            last_state: State::default(),
-            state: State::default(),
+            states: States::new(),
             indent_level: 0,
             options,
             events,
@@ -57,10 +49,9 @@ impl Emitter {
     /// Emits a human-friendly YAML character stream to the `writer`.
     pub fn emit(mut self, writer: &mut impl Write) -> Result<(), Error> {
         while let Some(event) = self.events.next() {
-            dbg!(&self.state, &self.last_state);
             match event {
-                Event::StreamStart => continue,
-                Event::StreamEnd => break,
+                Event::StreamStart => self.states.push(State::Stream),
+                Event::StreamEnd => self.states.pop(),
                 Event::DocumentStart => self.emit_document_start(writer)?,
                 Event::DocumentEnd => self.emit_document_end(writer)?,
                 Event::Alias(_) => todo!(),
@@ -71,19 +62,9 @@ impl Emitter {
                 Event::MappingEnd => self.emit_mapping_end(),
             }
         }
+
+        assert!(self.states.is_empty());
         Ok(())
-    }
-
-    fn transition_to(&mut self, new_state: State) {
-        if new_state != self.state {
-            self.last_state = self.state
-        }
-
-        self.state = new_state
-    }
-
-    fn transition_to_last(&mut self) {
-        self.state = self.last_state
     }
 
     fn emit_indent(&self, writer: &mut impl Write) -> Result<(), Error> {
@@ -96,35 +77,30 @@ impl Emitter {
         Ok(())
     }
 
-    fn emit_document_start(&self, writer: &mut impl Write) -> Result<(), Error> {
-        writeln!(writer, "---").context(WriteSnafu)
+    fn emit_document_start(&mut self, writer: &mut impl Write) -> Result<(), Error> {
+        writeln!(writer, "---").context(WriteSnafu)?;
+        self.states.push(State::Document);
+        Ok(())
     }
 
-    fn emit_document_end(&self, writer: &mut impl Write) -> Result<(), Error> {
-        writeln!(writer, "...").context(WriteSnafu)
+    fn emit_document_end(&mut self, writer: &mut impl Write) -> Result<(), Error> {
+        writeln!(writer, "...").context(WriteSnafu)?;
+        self.states.pop();
+        Ok(())
     }
 
     fn emit_scalar(&mut self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
-        match self.state {
-            State::Initial => todo!(),
-            State::SequenceItem => {
-                self.emit_indent(writer)?;
-                writeln!(writer, "- {}", value).context(WriteSnafu)?;
-            }
-            State::MappingKey => {
-                if let Some(Event::SequenceStart(_)) = self.events.peek() {
-                    writeln!(writer, "{}: ", value).context(WriteSnafu)?;
+        match self.states.current_mut() {
+            State::Stream => todo!(),
+            State::Document => todo!(),
+            State::Sequence => self.emit_sequence_item(writer, value)?,
+            State::Mapping(is_key) => {
+                if *is_key {
+                    *is_key = false;
+                    self.emit_mapping_key(writer, value)?;
                 } else {
-                    write!(writer, "{}: ", value).context(WriteSnafu)?;
-                }
-
-                self.transition_to(State::MappingValue);
-            }
-            State::MappingValue => {
-                writeln!(writer, "{}", value).context(WriteSnafu)?;
-
-                if !matches!(self.events.peek(), Some(Event::MappingEnd)) {
-                    self.transition_to(State::MappingKey)
+                    *is_key = true;
+                    self.emit_mapping_value(writer, value)?
                 }
             }
         }
@@ -132,9 +108,26 @@ impl Emitter {
         Ok(())
     }
 
+    fn emit_sequence_item(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
+        self.emit_indent(writer)?;
+        writeln!(writer, "- {}", value).context(WriteSnafu)
+    }
+
+    fn emit_mapping_key(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
+        if let Some(Event::SequenceStart(_)) = self.events.peek() {
+            writeln!(writer, "{}: ", value).context(WriteSnafu)
+        } else {
+            write!(writer, "{}: ", value).context(WriteSnafu)
+        }
+    }
+
+    fn emit_mapping_value(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
+        writeln!(writer, "{}", value).context(WriteSnafu)
+    }
+
     fn emit_sequence_start(&mut self) {
         self.indent_level += 1;
-        self.transition_to(State::SequenceItem)
+        self.states.push(State::Sequence)
     }
 
     fn emit_sequence_end(&mut self) {
@@ -142,7 +135,7 @@ impl Emitter {
             self.indent_level -= 1;
         }
 
-        self.transition_to_last()
+        self.states.pop()
     }
 
     fn emit_mapping_start(&mut self, writer: &mut impl Write) -> Result<(), Error> {
@@ -151,7 +144,7 @@ impl Emitter {
             self.emit_indent(writer)?
         }
 
-        self.transition_to(State::MappingKey);
+        self.states.push(State::Mapping(true));
         Ok(())
     }
 
@@ -160,6 +153,7 @@ impl Emitter {
             self.indent_level -= 1;
         }
 
-        self.transition_to_last()
+        // TODO (Techassi): Assert that the popped state is the state we expected
+        self.states.pop()
     }
 }

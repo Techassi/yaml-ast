@@ -1,4 +1,4 @@
-use crate::events::{Event, FromEvents, IntoEvents};
+use crate::events::{Event, IntoEvents};
 
 pub mod emitter;
 pub mod events;
@@ -34,12 +34,6 @@ impl IntoEvents for Stream {
 
         events.push(Event::StreamEnd);
         events
-    }
-}
-
-impl FromEvents for Stream {
-    fn from_events(events: Vec<Event>) -> Self {
-        todo!()
     }
 }
 
