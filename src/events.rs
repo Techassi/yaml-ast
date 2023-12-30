@@ -19,7 +19,7 @@ pub trait FromEvents {
     fn from_events(events: Vec<Event>) -> Self;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     StreamStart,
     StreamEnd,

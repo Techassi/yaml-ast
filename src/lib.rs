@@ -193,11 +193,19 @@ impl IntoEvents for Node {
 
                 events.push(Event::MappingEnd);
             }
-            Node::Sequence(_) => todo!(),
-            Node::String(string) => events.push(Event::Scalar(string)),
-            Node::Null => todo!(),
-            Node::Boolean(_) => todo!(),
-            Node::Integer(_) => todo!(),
+            Node::Sequence(sequence) => {
+                events.push(Event::SequenceStart(0));
+
+                for item in sequence {
+                    events.extend(item.into_events());
+                }
+
+                events.push(Event::SequenceEnd);
+            }
+            Node::String(s) => events.push(Event::Scalar(s)),
+            Node::Null => events.push(Event::Scalar("null".into())),
+            Node::Boolean(b) => events.push(Event::Scalar(b.to_string())),
+            Node::Integer(i) => events.push(Event::Scalar(i.to_string())),
             Node::FloatingPoint(_) => todo!(),
         }
 
@@ -269,13 +277,14 @@ mod test {
                 Node::String("nodeGroup".into()),
                 Node::String("master".into()),
             ),
-            // (
-            //     Node::String("roles".into()),
-            //     Node::Sequence(Sequence::from([
-            //         Node::String("master".into()),
-            //         Node::String("ingest".into()),
-            //     ])),
-            // ),
+            (Node::String("singleNode".into()), Node::Boolean(false)),
+            (
+                Node::String("roles".into()),
+                Node::Sequence(Sequence::from([
+                    Node::String("master".into()),
+                    Node::String("ingest".into()),
+                ])),
+            ),
         ]);
 
         let doc = Document::from_mapping(map);
@@ -283,12 +292,12 @@ mod test {
         let mut stream = Stream::new();
         stream.push_document(doc);
 
-        // let mut output = String::new();
+        let mut output = String::new();
         let events = stream.into_events();
-        // let emitter = Emitter::new(events, 2);
-        // emitter.emit(&mut output).unwrap();
+        let emitter = Emitter::new(events, 2);
+        emitter.emit(&mut output).unwrap();
 
-        println!("{events:?}");
-        // println!("{output}")
+        // println!("{events:?}");
+        println!("{output}")
     }
 }
