@@ -1,6 +1,4 @@
-use std::collections::BTreeMap;
-
-use crate::events::{Event, IntoEvents};
+use crate::events::{Event, FromEvents, IntoEvents};
 
 pub mod emitter;
 pub mod events;
@@ -36,6 +34,12 @@ impl IntoEvents for Stream {
 
         events.push(Event::StreamEnd);
         events
+    }
+}
+
+impl FromEvents for Stream {
+    fn from_events(events: Vec<Event>) -> Self {
+        todo!()
     }
 }
 
@@ -103,8 +107,9 @@ impl Default for ScopedTag {
     }
 }
 
-/// Type alias for a [`BTreeMap<Node, Node>`].
-pub type Mapping = BTreeMap<Node, Node>;
+// TODO (Techassi): Ensure keys are unique in mappings
+/// Type alias for a [`Vec<(Node, Node)>`].
+pub type Mapping = Vec<(Node, Node)>;
 
 /// Type alias for a [`Vec<Node>`].
 pub type Sequence = Vec<Node>;
@@ -131,13 +136,13 @@ pub type Sequence = Vec<Node>;
 /// The YAML specification defines nodes and tags a two separate (but related)
 /// concepts. Because Rust allows us to combine enums with structured data,
 /// this crate decides to combine both these concepts into one.
-#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug)]
 pub enum Node {
     /// Represents an associative container, where each key is unique in the
     /// association and mapped to exactly one value.
     ///
     /// See <https://yaml.org/spec/1.2.2/#10111-generic-mapping>
-    Mapping(BTreeMap<Node, Node>),
+    Mapping(Vec<(Node, Node)>),
 
     /// Represents a collection indexed by sequential integers starting with
     /// zero.
@@ -262,7 +267,7 @@ pub enum Kind {
 
 #[cfg(test)]
 mod test {
-    use crate::emitter::Emitter;
+    use crate::emitter::{Emitter, EmitterOptions};
 
     use super::*;
 
@@ -285,6 +290,7 @@ mod test {
                     Node::String("ingest".into()),
                 ])),
             ),
+            // (Node::String("replicas".into()), Node::Integer(3)),
         ]);
 
         let doc = Document::from_mapping(map);
@@ -292,9 +298,10 @@ mod test {
         let mut stream = Stream::new();
         stream.push_document(doc);
 
-        let mut output = String::new();
         let events = stream.into_events();
-        let emitter = Emitter::new(events, 2);
+        let mut output = String::new();
+
+        let emitter = Emitter::new(events, EmitterOptions::default());
         emitter.emit(&mut output).unwrap();
 
         // println!("{events:?}");
