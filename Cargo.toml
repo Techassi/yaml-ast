@@ -2,6 +2,13 @@
 name = "yaml-ast"
 version = "0.0.1"
 edition = "2021"
+description = "A pure Rust YAML 1.2.2 parser. Provides access to the AST and event-based emitter/parser."
+repository = "https://github.com/Techassi/yaml-ast"
+homepage = "https://github.com/Techassi/yaml-ast"
+keywords = ["yaml", "ast", "emitter", "parser"]
+categories = ["parsing"]
+license-file = "LICENSE"
+readme = "README.md"
 
 [dependencies]
 snafu = "0.7.5"
