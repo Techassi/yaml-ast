@@ -69,10 +69,7 @@ impl Emitter {
 
     fn emit_indent(&self, writer: &mut impl Write) -> Result<(), Error> {
         writer
-            .write_str(
-                &" ".repeat(self.options.indent_size)
-                    .repeat(self.indent_level),
-            )
+            .write_str(&" ".repeat(self.indent_level * self.options.indent_size))
             .context(WriteSnafu)?;
         Ok(())
     }
@@ -95,11 +92,16 @@ impl Emitter {
             State::Document => todo!(),
             State::Sequence => self.emit_sequence_item(writer, value)?,
             State::Mapping(is_key) => {
+                let next_is_key = match self.events.peek().unwrap() {
+                    Event::Scalar(_) | Event::MappingStart(_) => true,
+                    _ => false,
+                };
+
                 if *is_key {
-                    *is_key = false;
-                    self.emit_mapping_key(writer, value)?;
+                    *is_key = next_is_key;
+                    self.emit_mapping_key(writer, value)?
                 } else {
-                    *is_key = true;
+                    *is_key = next_is_key;
                     self.emit_mapping_value(writer, value)?
                 }
             }
@@ -113,20 +115,13 @@ impl Emitter {
         writeln!(writer, "- {}", value).context(WriteSnafu)
     }
 
-    fn emit_mapping_key(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
-        if let Some(Event::SequenceStart(_)) = self.events.peek() {
-            writeln!(writer, "{}: ", value).context(WriteSnafu)
-        } else {
-            write!(writer, "{}: ", value).context(WriteSnafu)
-        }
-    }
-
-    fn emit_mapping_value(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
-        writeln!(writer, "{}", value).context(WriteSnafu)
-    }
-
     fn emit_sequence_start(&mut self) {
         self.indent_level += 1;
+
+        if let State::Mapping(is_key) = self.states.current_mut() {
+            *is_key = true
+        }
+
         self.states.push(State::Sequence)
     }
 
@@ -138,13 +133,32 @@ impl Emitter {
         self.states.pop()
     }
 
+    fn emit_mapping_key(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
+        // Figure out when to indent
+        self.emit_indent(writer)?;
+
+        match self.events.peek() {
+            Some(event) => match event {
+                Event::SequenceStart(_) | Event::MappingStart(_) => {
+                    writeln!(writer, "{}: ", value).context(WriteSnafu)
+                }
+                _ => write!(writer, "{}: ", value).context(WriteSnafu),
+            },
+            None => unreachable!(),
+        }
+    }
+
+    fn emit_mapping_value(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
+        writeln!(writer, "{}", value).context(WriteSnafu)
+    }
+
     fn emit_mapping_start(&mut self, writer: &mut impl Write) -> Result<(), Error> {
         if let Some(Event::MappingStart(_)) = self.events.peek() {
             self.indent_level += 1;
-            self.emit_indent(writer)?
+            // self.emit_indent(writer)?
         }
 
-        self.states.push(State::Mapping(true));
+        self.states.push(State::Mapping(false));
         Ok(())
     }
 

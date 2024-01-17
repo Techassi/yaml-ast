@@ -6,6 +6,11 @@ impl States {
         Self(Vec::new())
     }
 
+    pub fn current(&self) -> &State {
+        // TODO (Techassi): Handle unwrap
+        self.0.last().unwrap()
+    }
+
     pub fn current_mut(&mut self) -> &mut State {
         // TODO (Techassi): Handle unwrap
         self.0.last_mut().unwrap()

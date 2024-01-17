@@ -30,5 +30,7 @@ pub enum Event {
     SequenceStart(usize),
     SequenceEnd,
     MappingStart(usize),
+    MappingKey,
+    MappingValue,
     MappingEnd,
 }
