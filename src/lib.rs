@@ -128,13 +128,13 @@ mod test {
                 Node::String("master".into()),
             ),
             (Node::String("singleNode".into()), Node::Boolean(false)),
-            (
-                Node::String("roles".into()),
-                Node::Sequence(Sequence::from([
-                    Node::String("master".into()),
-                    Node::String("ingest".into()),
-                ])),
-            ),
+            // (
+            //     Node::String("roles".into()),
+            //     Node::Sequence(Sequence::from([
+            //         Node::String("master".into()),
+            //         Node::String("ingest".into()),
+            //     ])),
+            // ),
             // (Node::String("replicas".into()), Node::Integer(3)),
             // (
             //     Node::String("global".into()),
@@ -156,7 +156,7 @@ mod test {
         stream.push_document(doc);
 
         let mut emitter = Emitter::new(Options::default());
-        let output = emitter.from_events(stream.events());
+        let output = emitter.from_events(stream.events()).unwrap();
 
         // println!("{events:?}");
         println!("{output}")

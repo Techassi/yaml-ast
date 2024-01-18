@@ -85,14 +85,17 @@ impl Default for Node {
     }
 }
 
+// TODO (Techassi): Try to avoid cloning. This can be achieved by consuming self
+// which would sadly trash the AST. The AST cannot be re-used after being turned
+// into events. Do we want that?
 impl IntoEvents for Node {
     fn into_events(&self, events: &mut Vec<Event>) {
         match self {
             Node::Mapping(m) => m.into_events(events),
             Node::Sequence(s) => s.into_events(events),
-            Node::String(_) => todo!(),
+            Node::String(s) => events.push(Event::Scalar(s.clone())),
             Node::Null => todo!(),
-            Node::Boolean(_) => todo!(),
+            Node::Boolean(b) => events.push(Event::Scalar(b.to_string())),
             Node::Integer(_) => todo!(),
             Node::FloatingPoint(_) => todo!(),
             Node::Comment(c) => c.into_events(events),
