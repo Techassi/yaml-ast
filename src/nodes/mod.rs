@@ -1,8 +1,10 @@
+use crate::events::{Event, IntoEvents};
+
 mod mapping;
+mod sequence;
 
 pub use mapping::*;
-
-use crate::events::{Event, IntoEvents};
+pub use sequence::*;
 
 /// A YAML schema is a combination of a set of tags and a mechanism for
 /// resolving non-specific tags.
@@ -38,7 +40,7 @@ pub enum Node {
     /// zero.
     ///
     /// See <https://yaml.org/spec/1.2.2/#10112-generic-sequence>
-    Sequence(Vec<Node>),
+    Sequence(Sequence),
 
     /// Represents a Unicode string, a sequence of zero or more Unicode
     /// characters.
@@ -65,6 +67,16 @@ pub enum Node {
     ///
     /// See <https://yaml.org/spec/1.2.2/#10214-floating-point>
     FloatingPoint(String),
+
+    /// Represents a comment.
+    ///
+    /// Providing this node differs from the official YAML spec. The spec
+    /// states that comments have no effect on the serialization tree or
+    /// representation graph (which this is). Per spec, they are a
+    /// representation detail. To enable full control over the AST, we include
+    /// it here. Access to the comments and their content are a valid use-case
+    /// for some applications.
+    Comment(Comment),
 }
 
 impl Default for Node {
@@ -74,36 +86,17 @@ impl Default for Node {
 }
 
 impl IntoEvents for Node {
-    fn into_events(self) -> Vec<Event> {
-        let mut events = Vec::new();
-
+    fn into_events(&self, events: &mut Vec<Event>) {
         match self {
-            Node::Mapping(mapping) => {
-                events.push(Event::MappingStart(0));
-
-                for pair in mapping {
-                    events.extend(pair.into_events())
-                }
-
-                events.push(Event::MappingEnd);
-            }
-            Node::Sequence(sequence) => {
-                events.push(Event::SequenceStart(0));
-
-                for item in sequence {
-                    events.extend(item.into_events());
-                }
-
-                events.push(Event::SequenceEnd);
-            }
-            Node::String(s) => events.push(Event::Scalar(s)),
-            Node::Null => events.push(Event::Scalar("null".into())),
-            Node::Boolean(b) => events.push(Event::Scalar(b.to_string())),
-            Node::Integer(i) => events.push(Event::Scalar(i.to_string())),
+            Node::Mapping(m) => m.into_events(events),
+            Node::Sequence(s) => s.into_events(events),
+            Node::String(_) => todo!(),
+            Node::Null => todo!(),
+            Node::Boolean(_) => todo!(),
+            Node::Integer(_) => todo!(),
             Node::FloatingPoint(_) => todo!(),
+            Node::Comment(c) => c.into_events(events),
         }
-
-        events
     }
 }
 
@@ -119,6 +112,7 @@ impl Node {
             Boolean(_) => "tag:yaml.org,2002:bool",
             Integer(_) => "tag:yaml.org,2002:int",
             FloatingPoint(_) => "tag:yaml.org,2002:float",
+            Comment(_) => "",
         }
         .into()
     }
@@ -134,6 +128,7 @@ impl Node {
             Boolean(_) => Kind::Scalar,
             Integer(_) => Kind::Scalar,
             FloatingPoint(_) => Kind::Scalar,
+            Comment(_) => Kind::Scalar,
         }
     }
 
@@ -152,4 +147,25 @@ pub enum Kind {
     Sequence,
     Mapping,
     Scalar,
+}
+
+#[derive(Debug)]
+pub struct Comment {
+    pub kind: CommentKind,
+    pub content: String,
+}
+
+impl IntoEvents for Comment {
+    fn into_events(&self, events: &mut Vec<Event>) {
+        events.push(Event::Comment(self.content.clone()))
+    }
+}
+
+/// Represents the kind of comment.
+///
+/// Inline comments are interleaved with other
+#[derive(Debug)]
+pub enum CommentKind {
+    Inline,
+    Block,
 }

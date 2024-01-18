@@ -89,6 +89,18 @@ impl<const N: usize> From<[(Node, Node); N]> for Mapping {
     }
 }
 
+impl IntoEvents for Mapping {
+    fn into_events(&self, events: &mut Vec<Event>) {
+        events.push(Event::MappingStart);
+
+        for pair in &self.0 {
+            pair.into_events(events);
+        }
+
+        events.push(Event::MappingEnd);
+    }
+}
+
 /// A mapping key/value pair. The AST structure looks like this:
 ///
 /// ```plain
@@ -98,28 +110,58 @@ impl<const N: usize> From<[(Node, Node); N]> for Mapping {
 /// )
 /// ```
 #[derive(Debug)]
-pub struct MappingPair((MappingKey, MappingValue));
-
-impl IntoEvents for MappingPair {
-    fn into_events(self) -> Vec<Event> {
-        todo!()
-    }
+pub struct MappingPair {
+    key: MappingKey,
+    value: MappingValue,
 }
 
 impl From<(MappingKey, MappingValue)> for MappingPair {
     fn from(pair: (MappingKey, MappingValue)) -> Self {
-        Self(pair)
+        Self {
+            key: pair.0,
+            value: pair.1,
+        }
     }
 }
 
 impl From<(Node, Node)> for MappingPair {
     fn from(pair: (Node, Node)) -> Self {
-        Self((MappingKey(pair.0), MappingValue(pair.1)))
+        Self {
+            key: MappingKey(pair.0),
+            value: MappingValue(pair.1),
+        }
+    }
+}
+
+impl IntoEvents for MappingPair {
+    fn into_events(&self, events: &mut Vec<Event>) {
+        events.push(Event::MappingPairStart);
+
+        self.key.into_events(events);
+        self.value.into_events(events);
+
+        events.push(Event::MappingPairEnd);
     }
 }
 
 #[derive(Debug)]
 pub struct MappingKey(Node);
 
+impl IntoEvents for MappingKey {
+    fn into_events(&self, events: &mut Vec<Event>) {
+        events.push(Event::MappingKeyStart);
+        self.0.into_events(events);
+        events.push(Event::MappingKeyEnd);
+    }
+}
+
 #[derive(Debug)]
 pub struct MappingValue(Node);
+
+impl IntoEvents for MappingValue {
+    fn into_events(&self, events: &mut Vec<Event>) {
+        events.push(Event::MappingValueStart);
+        self.0.into_events(events);
+        events.push(Event::MappingValueEnd);
+    }
+}

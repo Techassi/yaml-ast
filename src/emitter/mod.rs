@@ -1,11 +1,6 @@
 use std::fmt::Write;
 
-use snafu::{ResultExt, Snafu};
-
-use crate::{
-    emitter::state::{State, States},
-    events::Event,
-};
+use snafu::Snafu;
 
 mod iter;
 mod options;
@@ -14,160 +9,91 @@ mod state;
 pub use iter::*;
 pub use options::*;
 
+use crate::events::Event;
+
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("failed to write to output"))]
+    // TODO (Techassi): Is there any better way to support error propagation
+    // outside of this module without importing the (non-public) context
+    // selectors.
+    #[snafu(display("failed to write to output"), context(false))]
     Write { source: std::fmt::Error },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+pub struct State {
+    pub indent_level: usize,
+    pub is_root: bool,
+}
+
 pub struct Emitter {
-    indent_level: usize,
-
-    // TODO (Techassi): The state(s) need to be managed as a stack to keep track
-    // of mapping / sequence recursion depths
-    states: States,
-
-    options: EmitterOptions,
-    events: EventIter,
+    options: Options,
+    writer: String,
+    state: State,
 }
 
 impl Emitter {
-    /// Creates a new emitter which will emit characters based on the event
-    /// stream using the provided `ident_size`.
-    pub fn new(events: Vec<Event>, options: EmitterOptions) -> Self {
-        let events = EventIter::new(events);
-
+    pub fn new(options: Options) -> Self {
         Self {
-            states: States::new(),
-            indent_level: 0,
+            state: State::default(),
+            writer: String::new(),
             options,
-            events,
         }
     }
 
-    /// Emits a human-friendly YAML character stream to the `writer`.
-    pub fn emit(mut self, writer: &mut impl Write) -> Result<(), Error> {
-        while let Some(event) = self.events.next() {
+    pub fn from_events(&mut self, events: Vec<Event>) -> String {
+        for event in events {
             match event {
-                Event::StreamStart => self.states.push(State::Stream),
-                Event::StreamEnd => self.states.pop(),
-                Event::DocumentStart => self.emit_document_start(writer)?,
-                Event::DocumentEnd => self.emit_document_end(writer)?,
-                Event::Alias(_) => todo!(),
-                Event::Scalar(value) => self.emit_scalar(writer, &value)?,
-                Event::SequenceStart(_) => self.emit_sequence_start(),
-                Event::SequenceEnd => self.emit_sequence_end(),
-                Event::MappingStart(_) => self.emit_mapping_start(writer)?,
-                Event::MappingEnd => self.emit_mapping_end(),
+                Event::StreamStart => todo!(),
+                Event::StreamEnd => todo!(),
+                Event::DocumentStart => todo!(),
+                Event::DocumentEnd => todo!(),
+                Event::MappingStart => todo!(),
+                Event::MappingPairStart => todo!(),
+                Event::MappingKeyStart => todo!(),
+                Event::MappingKeyEnd => todo!(),
+                Event::MappingValueStart => todo!(),
+                Event::MappingValueEnd => todo!(),
+                Event::MappingPairEnd => todo!(),
+                Event::MappingEnd => todo!(),
+                Event::SequenceStart => todo!(),
+                Event::SequenceItemStart => todo!(),
+                Event::SequenceItemEnd => todo!(),
+                Event::SequenceEnd => todo!(),
+                Event::Scalar(_) => todo!(),
+                Event::Comment(_) => todo!(),
             }
         }
 
-        assert!(self.states.is_empty());
+        self.writer.clone()
+    }
+
+    pub fn emit(&mut self, s: &str) -> Result<(), Error> {
+        self.writer.write_str(s)?;
         Ok(())
     }
 
-    fn emit_indent(&self, writer: &mut impl Write) -> Result<(), Error> {
-        writer
-            .write_str(&" ".repeat(self.indent_level * self.options.indent_size))
-            .context(WriteSnafu)?;
-        Ok(())
-    }
-
-    fn emit_document_start(&mut self, writer: &mut impl Write) -> Result<(), Error> {
-        writeln!(writer, "---").context(WriteSnafu)?;
-        self.states.push(State::Document);
-        Ok(())
-    }
-
-    fn emit_document_end(&mut self, writer: &mut impl Write) -> Result<(), Error> {
-        writeln!(writer, "...").context(WriteSnafu)?;
-        self.states.pop();
-        Ok(())
-    }
-
-    fn emit_scalar(&mut self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
-        match self.states.current_mut() {
-            State::Stream => todo!(),
-            State::Document => todo!(),
-            State::Sequence => self.emit_sequence_item(writer, value)?,
-            State::Mapping(is_key) => {
-                let next_is_key = match self.events.peek().unwrap() {
-                    Event::Scalar(_) | Event::MappingStart(_) => true,
-                    _ => false,
-                };
-
-                if *is_key {
-                    *is_key = next_is_key;
-                    self.emit_mapping_key(writer, value)?
-                } else {
-                    *is_key = next_is_key;
-                    self.emit_mapping_value(writer, value)?
-                }
-            }
+    pub fn emit_indent(&mut self) -> Result<(), Error> {
+        if self.state.indent_level == 0 {
+            return Ok(());
         }
+
+        let indent = " ".repeat(self.state.indent_level * self.options.indent_size);
+        self.writer.write_str(&indent)?;
 
         Ok(())
     }
 
-    fn emit_sequence_item(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
-        self.emit_indent(writer)?;
-        writeln!(writer, "- {}", value).context(WriteSnafu)
-    }
-
-    fn emit_sequence_start(&mut self) {
-        self.indent_level += 1;
-
-        if let State::Mapping(is_key) = self.states.current_mut() {
-            *is_key = true
-        }
-
-        self.states.push(State::Sequence)
-    }
-
-    fn emit_sequence_end(&mut self) {
-        if self.indent_level > 0 {
-            self.indent_level -= 1;
-        }
-
-        self.states.pop()
-    }
-
-    fn emit_mapping_key(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
-        // Figure out when to indent
-        self.emit_indent(writer)?;
-
-        match self.events.peek() {
-            Some(event) => match event {
-                Event::SequenceStart(_) | Event::MappingStart(_) => {
-                    writeln!(writer, "{}: ", value).context(WriteSnafu)
-                }
-                _ => write!(writer, "{}: ", value).context(WriteSnafu),
-            },
-            None => unreachable!(),
-        }
-    }
-
-    fn emit_mapping_value(&self, writer: &mut impl Write, value: &str) -> Result<(), Error> {
-        writeln!(writer, "{}", value).context(WriteSnafu)
-    }
-
-    fn emit_mapping_start(&mut self, writer: &mut impl Write) -> Result<(), Error> {
-        if let Some(Event::MappingStart(_)) = self.events.peek() {
-            self.indent_level += 1;
-            // self.emit_indent(writer)?
-        }
-
-        self.states.push(State::Mapping(false));
+    pub fn emit_newline(&mut self) -> Result<(), Error> {
+        self.writer.write_str("\n")?;
         Ok(())
     }
 
-    fn emit_mapping_end(&mut self) {
-        if self.indent_level > 0 {
-            self.indent_level -= 1;
-        }
+    pub fn increase_indent(&mut self) {
+        self.state.indent_level += 1;
+    }
 
-        // TODO (Techassi): Assert that the popped state is the state we expected
-        self.states.pop()
+    pub fn decrease_indent(&mut self) {
+        self.state.indent_level -= 1;
     }
 }

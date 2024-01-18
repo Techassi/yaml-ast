@@ -14,6 +14,18 @@ pub enum Error {}
 #[derive(Debug, Default)]
 pub struct Stream(Vec<Document>);
 
+impl IntoEvents for Stream {
+    fn into_events(&self, events: &mut Vec<Event>) {
+        events.push(Event::StreamStart);
+
+        for doc in &self.0 {
+            doc.into_events(events);
+        }
+
+        events.push(Event::StreamEnd);
+    }
+}
+
 impl Stream {
     /// Creates a new (empty) stream of YAML [`Document`]s.
     pub fn new() -> Self {
@@ -25,18 +37,10 @@ impl Stream {
         self.0.push(document);
         self
     }
-}
 
-impl IntoEvents for Stream {
-    fn into_events(self) -> Vec<Event> {
+    pub fn events(&self) -> Vec<Event> {
         let mut events = Vec::new();
-        events.push(Event::StreamStart);
-
-        for doc in self.0 {
-            events.extend(doc.into_events())
-        }
-
-        events.push(Event::StreamEnd);
+        self.into_events(&mut events);
         events
     }
 }
@@ -53,16 +57,14 @@ pub struct Document {
 }
 
 impl IntoEvents for Document {
-    fn into_events(self) -> Vec<Event> {
-        let mut events = Vec::new();
+    fn into_events(&self, events: &mut Vec<Event>) {
         events.push(Event::DocumentStart);
 
-        for node in self.nodes {
-            events.extend(node.into_events())
+        for node in &self.nodes {
+            node.into_events(events);
         }
 
         events.push(Event::DocumentEnd);
-        events
     }
 }
 
@@ -105,12 +107,12 @@ impl Default for ScopedTag {
     }
 }
 
-/// Type alias for a [`Vec<Node>`].
-pub type Sequence = Vec<Node>;
-
 #[cfg(test)]
 mod test {
-    use crate::emitter::{Emitter, EmitterOptions};
+    use crate::{
+        emitter::{Emitter, Options},
+        nodes::{Comment, CommentKind, Sequence},
+    };
 
     use super::*;
 
@@ -133,26 +135,28 @@ mod test {
                     Node::String("ingest".into()),
                 ])),
             ),
-            (Node::String("replicas".into()), Node::Integer(3)),
-            (
-                Node::String("global".into()),
-                Node::Mapping(Mapping::from([(
-                    Node::String("dockerRegistry".into()),
-                    Node::String("test".into()),
-                )])),
-            ),
+            // (Node::String("replicas".into()), Node::Integer(3)),
+            // (
+            //     Node::String("global".into()),
+            //     Node::Mapping(Mapping::from([(
+            //         Node::String("dockerRegistry".into()),
+            //         Node::String("test".into()),
+            //     )])),
+            // ),
         ]);
 
-        let doc = Document::from_mapping(map);
+        let mut doc = Document::new();
+        doc.push_node(Node::Comment(Comment {
+            kind: CommentKind::Block,
+            content: String::from("my comment"),
+        }));
+        doc.push_node(Node::Mapping(map));
 
         let mut stream = Stream::new();
         stream.push_document(doc);
 
-        let events = stream.into_events();
-        let mut output = String::new();
-
-        let emitter = Emitter::new(events, EmitterOptions::default());
-        emitter.emit(&mut output).unwrap();
+        let mut emitter = Emitter::new(Options::default());
+        let output = emitter.from_events(stream.events());
 
         // println!("{events:?}");
         println!("{output}")

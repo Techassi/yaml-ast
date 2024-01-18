@@ -12,7 +12,7 @@ pub trait IntoEvents {
     ///
     /// - <https://yaml.org/spec/1.2.2/#serializing-the-representation-graph>
     /// - <https://yaml.org/spec/1.2.2/#presenting-the-serialization-tree>
-    fn into_events(self) -> Vec<Event>;
+    fn into_events(&self, events: &mut Vec<Event>);
 }
 
 pub trait FromEvents {
@@ -25,12 +25,18 @@ pub enum Event {
     StreamEnd,
     DocumentStart,
     DocumentEnd,
-    Alias(usize),
-    Scalar(String),
-    SequenceStart(usize),
-    SequenceEnd,
-    MappingStart(usize),
-    MappingKey,
-    MappingValue,
+    MappingStart,
+    MappingPairStart,
+    MappingKeyStart,
+    MappingKeyEnd,
+    MappingValueStart,
+    MappingValueEnd,
+    MappingPairEnd,
     MappingEnd,
+    SequenceStart,
+    SequenceItemStart,
+    SequenceItemEnd,
+    SequenceEnd,
+    Scalar(String),
+    Comment(String),
 }

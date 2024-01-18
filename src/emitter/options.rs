@@ -3,17 +3,17 @@
 /// It provides a builder to selectively customize individual settings. If no
 /// customization is required, use [`EmitterOptions::default()`].
 #[derive(Debug)]
-pub struct EmitterOptions {
+pub struct Options {
     pub indent_size: usize,
 }
 
-impl Default for EmitterOptions {
+impl Default for Options {
     fn default() -> Self {
         Self::builder().build()
     }
 }
 
-impl EmitterOptions {
+impl Options {
     pub fn builder() -> EmitterOptionsBuilder {
         EmitterOptionsBuilder::default()
     }
@@ -30,8 +30,8 @@ impl Default for EmitterOptionsBuilder {
 }
 
 impl EmitterOptionsBuilder {
-    pub fn build(self) -> EmitterOptions {
-        EmitterOptions {
+    pub fn build(self) -> Options {
+        Options {
             indent_size: self.indent_size,
         }
     }
