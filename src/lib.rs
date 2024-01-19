@@ -128,21 +128,21 @@ mod test {
                 Node::String("master".into()),
             ),
             (Node::String("singleNode".into()), Node::Boolean(false)),
-            // (
-            //     Node::String("roles".into()),
-            //     Node::Sequence(Sequence::from([
-            //         Node::String("master".into()),
-            //         Node::String("ingest".into()),
-            //     ])),
-            // ),
-            // (Node::String("replicas".into()), Node::Integer(3)),
-            // (
-            //     Node::String("global".into()),
-            //     Node::Mapping(Mapping::from([(
-            //         Node::String("dockerRegistry".into()),
-            //         Node::String("test".into()),
-            //     )])),
-            // ),
+            (
+                Node::String("roles".into()),
+                Node::Sequence(Sequence::from([
+                    Node::String("master".into()),
+                    Node::String("ingest".into()),
+                ])),
+            ),
+            (Node::String("replicas".into()), Node::Integer(3)),
+            (
+                Node::String("global".into()),
+                Node::Mapping(Mapping::from([(
+                    Node::String("dockerRegistry".into()),
+                    Node::String("test".into()),
+                )])),
+            ),
         ]);
 
         let mut doc = Document::new();
@@ -158,7 +158,7 @@ mod test {
         let mut emitter = Emitter::new(Options::default());
         let output = emitter.from_events(stream.events()).unwrap();
 
-        // println!("{events:?}");
+        // println!("{:?}", stream.events());
         println!("{output}")
     }
 }

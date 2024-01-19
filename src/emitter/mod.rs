@@ -59,10 +59,10 @@ impl Emitter {
                 Event::MappingValueEnd => continue,
                 Event::MappingPairEnd => self.emit_newline()?,
                 Event::MappingEnd => self.emit_mapping_end(),
-                Event::SequenceStart => todo!(),
-                Event::SequenceItemStart => todo!(),
-                Event::SequenceItemEnd => todo!(),
-                Event::SequenceEnd => todo!(),
+                Event::SequenceStart => self.emit_sequence_start()?,
+                Event::SequenceItemStart => self.emit_sequence_item_start()?,
+                Event::SequenceItemEnd => self.emit_sequence_item_end(&events)?,
+                Event::SequenceEnd => self.emit_sequence_end(),
                 Event::Scalar(s) => self.emit_scalar(s)?,
                 Event::Comment(c) => self.emit_comment(c)?,
             }
@@ -142,6 +142,31 @@ impl Emitter {
 
     fn emit_mapping_key_end(&mut self) -> Result<(), Error> {
         self.writer.write_str(": ")?;
+        Ok(())
+    }
+
+    fn emit_sequence_start(&mut self) -> Result<(), Error> {
+        self.increase_indent();
+        self.emit_newline()?;
+        Ok(())
+    }
+
+    fn emit_sequence_end(&mut self) {
+        self.decrease_indent();
+    }
+
+    fn emit_sequence_item_start(&mut self) -> Result<(), Error> {
+        self.emit_indent()?;
+        self.writer.write_str("- ")?;
+        Ok(())
+    }
+
+    fn emit_sequence_item_end<'a>(&'a mut self, events: &'a [Event]) -> Result<(), Error> {
+        if let Some(Event::SequenceEnd) = self.next_event(events) {
+            return Ok(());
+        }
+
+        self.emit_newline()?;
         Ok(())
     }
 

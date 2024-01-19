@@ -96,7 +96,7 @@ impl IntoEvents for Node {
             Node::String(s) => events.push(Event::Scalar(s.clone())),
             Node::Null => todo!(),
             Node::Boolean(b) => events.push(Event::Scalar(b.to_string())),
-            Node::Integer(_) => todo!(),
+            Node::Integer(i) => events.push(Event::Scalar(i.to_string())),
             Node::FloatingPoint(_) => todo!(),
             Node::Comment(c) => c.into_events(events),
         }
